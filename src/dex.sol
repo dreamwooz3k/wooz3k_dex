@@ -102,11 +102,4 @@ contract Dex is ERC20{
             z = (x / z + z) / 2;
         }
     }
-
-    function getTokenAddresses() public returns(address a, address  b, address c)
-    {
-        a = address(tokenX);
-        b = address(tokenY);
-        c = address(this);
-    }
 }
