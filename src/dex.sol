@@ -6,7 +6,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract dex is ERC20{
+contract Dex is ERC20{
 
     ERC20 public tokenX;
     ERC20 public tokenY;
@@ -24,22 +24,29 @@ contract dex is ERC20{
 
         if(tokenXAmount==0)
         {
-            uint256 outputAmount = tokenYAmount-(tokenYAmount/1000);
+            uint256 input = tokenYAmount-(tokenYAmount/1000);
+            uint256 k_div = tokenY.balanceOf(address(this)) + input;
+            outputAmount = tokenX.balanceOf(address(this)) - k/k_div;
             require(outputAmount>=tokenMinimumOutputAmount, "tokenMinimumOutputAmount Value Check");
             require(tokenX.balanceOf(address(this)) >= outputAmount, "liquidity less");
 
             tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
             tokenX.transfer(msg.sender, outputAmount);
+            
         }
         else
         {
-            uint256 outputAmount = tokenXAmount-(tokenXAmount/1000);
+            uint256 input = tokenXAmount-(tokenXAmount/1000);
+            uint256 k_div = tokenX.balanceOf(address(this)) + input;
+            outputAmount = tokenY.balanceOf(address(this)) - k/k_div;
             require(outputAmount>=tokenMinimumOutputAmount, "tokenMinimumOutputAmount Value Check");
             require(tokenY.balanceOf(address(this)) >= outputAmount, "liquidity less");
             
             tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
             tokenY.transfer(msg.sender, outputAmount);
         }
+
+        k = tokenX.balanceOf(address(this))*tokenY.balanceOf(address(this));
     }
 
     function addLiquidity(uint256 tokenXAmount, uint256 tokenYAmount, uint256 minimumLPTokenAmount) external returns (uint256 LPTokenAmount)
@@ -48,10 +55,13 @@ contract dex is ERC20{
 
         tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
         tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
+
+        k=tokenX.balanceOf(address(this))*tokenY.balanceOf(address(this));
+
         if(totalSupply()==0)
         {
-            k = tokenX.balanceOf(address(this)) * tokenY.balanceOf(address(this));
-            LPTokenAmount = sqrt(k);
+            LPTokenAmount = tokenX.balanceOf(address(this)) * tokenY.balanceOf(address(this));
+            LPTokenAmount = sqrt(LPTokenAmount);
         }
         else
         {
@@ -78,6 +88,8 @@ contract dex is ERC20{
         _burn(msg.sender, LPTokenAmount);
         tokenX.transfer(msg.sender, receive_tokenX);
         tokenY.transfer(msg.sender, receive_tokenY);
+
+        k = (tokenX.balanceOf(address(this))) * tokenY.balanceOf(address(this));
     }
 
     function sqrt(uint x) public pure returns (uint y) 
@@ -89,5 +101,12 @@ contract dex is ERC20{
             y = z;
             z = (x / z + z) / 2;
         }
+    }
+
+    function getTokenAddresses() public returns(address a, address  b, address c)
+    {
+        a = address(tokenX);
+        b = address(tokenY);
+        c = address(this);
     }
 }
