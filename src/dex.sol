@@ -1,77 +1,87 @@
 // SPDX-License-Identifier: UNLICENSED
-// forge install OpenZeppelin/openzeppelin-contracts --no-comit
-// touch remappings.txt -> @openzeppelin/=lib/openzeppelin-contracts/
 pragma solidity ^0.8.13;
 
+import "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+contract Dex is ERC20 {
+    using SafeERC20 for IERC20;
 
-contract Dex is ERC20{
+    IERC20 _tokenX;
+    IERC20 _tokenY;
 
-    ERC20 public tokenX;
-    ERC20 public tokenY;
+    uint256 private k;
 
-    uint256 public k;
+    constructor(address tokenX, address tokenY) ERC20("DreamAcademy DEX LP token", "DA-DEX-LP") {
+        require(tokenX != tokenY, "DA-DEX: Tokens should be different");
 
-    constructor(address _tokenX, address _tokenY) ERC20("LP-Token", "LP")
-    {
-        tokenX = ERC20(_tokenX);
-        tokenY = ERC20(_tokenY);
+        _tokenX = IERC20(tokenX);
+        _tokenY = IERC20(tokenY);
     }
-    function swap(uint256 tokenXAmount, uint256 tokenYAmount, uint256 tokenMinimumOutputAmount) external returns (uint256 outputAmount)
+
+    function swap(uint256 tokenXAmount, uint256 tokenYAmount, uint256 tokenMinimumOutputAmount)
+        external
+        returns (uint256 outputAmount)
     {
-        require((tokenXAmount==0 && tokenY.balanceOf(msg.sender)>=tokenXAmount) || (tokenYAmount==0 && tokenX.balanceOf(msg.sender)>=tokenXAmount));
+        require(tokenXAmount % 1000 == 0 && tokenYAmount % 1000 ==0, "no fee");
+        require((tokenXAmount==0 && _tokenY.balanceOf(msg.sender)>=tokenXAmount) || (tokenYAmount==0 && _tokenX.balanceOf(msg.sender)>=tokenXAmount));
 
         if(tokenXAmount==0)
         {
             uint256 input = tokenYAmount-(tokenYAmount/1000);
-            uint256 k_div = tokenY.balanceOf(address(this)) + input;
-            outputAmount = tokenX.balanceOf(address(this)) - k/k_div;
+            uint256 k_div = _tokenY.balanceOf(address(this)) + input;
+            outputAmount = _tokenX.balanceOf(address(this)) - k/k_div;
             require(outputAmount>=tokenMinimumOutputAmount, "tokenMinimumOutputAmount Value Check");
-            require(tokenX.balanceOf(address(this)) >= outputAmount, "liquidity less");
+            require(_tokenX.balanceOf(address(this)) >= outputAmount, "liquidity less");
 
-            tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
-            tokenX.transfer(msg.sender, outputAmount);
-            
+            _tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
+            _tokenX.transfer(msg.sender, outputAmount);
         }
         else
         {
             uint256 input = tokenXAmount-(tokenXAmount/1000);
-            uint256 k_div = tokenX.balanceOf(address(this)) + input;
-            outputAmount = tokenY.balanceOf(address(this)) - k/k_div;
+            uint256 k_div = _tokenX.balanceOf(address(this)) + input;
+            outputAmount = _tokenY.balanceOf(address(this)) - k/k_div;
             require(outputAmount>=tokenMinimumOutputAmount, "tokenMinimumOutputAmount Value Check");
-            require(tokenY.balanceOf(address(this)) >= outputAmount, "liquidity less");
+            require(_tokenY.balanceOf(address(this)) >= outputAmount, "liquidity less");
             
-            tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
-            tokenY.transfer(msg.sender, outputAmount);
+            _tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
+            _tokenY.transfer(msg.sender, outputAmount);
         }
 
-        k = tokenX.balanceOf(address(this))*tokenY.balanceOf(address(this));
+        k = _tokenX.balanceOf(address(this))*_tokenY.balanceOf(address(this));
     }
 
-    function addLiquidity(uint256 tokenXAmount, uint256 tokenYAmount, uint256 minimumLPTokenAmount) external returns (uint256 LPTokenAmount)
+    function addLiquidity(uint256 tokenXAmount, uint256 tokenYAmount, uint256 minimumLPTokenAmount)
+        external
+        returns (uint256 LPTokenAmount)
     {
-        require(tokenX.balanceOf(msg.sender) >= tokenXAmount && tokenY.balanceOf(msg.sender) >= tokenYAmount, "Amount Value Check");
+        require(tokenXAmount != 0 && tokenYAmount !=0, "AddLiquidity invalid initialization check error");
+        require(_tokenX.allowance(msg.sender, address(this)) >= tokenXAmount && _tokenY.allowance(msg.sender, address(this)) >= tokenYAmount, "ERC20: insufficient allowance");
+        require(_tokenX.balanceOf(msg.sender) >= tokenXAmount && _tokenY.balanceOf(msg.sender) >= tokenYAmount, "ERC20: transfer amount exceeds balance");
 
-        tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
-        tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
+        _tokenX.transferFrom(msg.sender, address(this), tokenXAmount);
+        _tokenY.transferFrom(msg.sender, address(this), tokenYAmount);
 
-        k=tokenX.balanceOf(address(this))*tokenY.balanceOf(address(this));
+        k=_tokenX.balanceOf(address(this))*_tokenY.balanceOf(address(this));
 
         if(totalSupply()==0)
         {
-            LPTokenAmount = tokenX.balanceOf(address(this)) * tokenY.balanceOf(address(this));
+            LPTokenAmount = _tokenX.balanceOf(address(this)) * _tokenY.balanceOf(address(this));
             LPTokenAmount = sqrt(LPTokenAmount);
         }
         else
         {
-            if(tokenXAmount >= tokenYAmount)
+            uint LPTokenAmountX=(tokenYAmount*totalSupply())/(_tokenY.balanceOf(address(this))-tokenYAmount);
+            uint LPTokenAmountY=(tokenXAmount*totalSupply())/(_tokenX.balanceOf(address(this))-tokenXAmount);
+
+            if(LPTokenAmountX >= LPTokenAmountY)
             {
-                LPTokenAmount = (tokenYAmount*totalSupply())/(tokenY.balanceOf(address(this))-tokenYAmount);
+                LPTokenAmount = LPTokenAmountY;
             }
             else
             {
-                LPTokenAmount = (tokenXAmount*totalSupply())/(tokenX.balanceOf(address(this))-tokenXAmount);
+                LPTokenAmount = LPTokenAmountX;
             }
         }
         
@@ -79,27 +89,31 @@ contract Dex is ERC20{
         _mint(msg.sender, LPTokenAmount);
     }
 
-    function removeLiquidity(uint256 LPTokenAmount, uint256 minimumTokenXAmount, uint256 minimumTokenYAmount) external
+    function removeLiquidity(uint256 LPTokenAmount, uint256 minimumTokenXAmount, uint256 minimumTokenYAmount)
+        external returns (uint256 transferX, uint256 transferY)
     {
         require(balanceOf(msg.sender)>=LPTokenAmount);
-        uint256 receive_tokenX=(tokenX.balanceOf(address(this))*LPTokenAmount)/totalSupply();
-        uint256 receive_tokenY=(tokenY.balanceOf(address(this))*LPTokenAmount)/totalSupply();
-        require(receive_tokenX>=minimumTokenXAmount && receive_tokenY>=minimumTokenYAmount, "minimumToken less");
+        transferX=(_tokenX.balanceOf(address(this))*LPTokenAmount)/totalSupply();
+        transferY=(_tokenY.balanceOf(address(this))*LPTokenAmount)/totalSupply();
+        require(transferX>=minimumTokenXAmount && transferY>=minimumTokenYAmount, "minimumToken less");
         _burn(msg.sender, LPTokenAmount);
-        tokenX.transfer(msg.sender, receive_tokenX);
-        tokenY.transfer(msg.sender, receive_tokenY);
+        _tokenX.transfer(msg.sender, transferX);
+        _tokenY.transfer(msg.sender, transferY);
 
-        k = (tokenX.balanceOf(address(this))) * tokenY.balanceOf(address(this));
+        k = (_tokenX.balanceOf(address(this))) * _tokenY.balanceOf(address(this));
     }
 
-    function sqrt(uint x) public pure returns (uint y) 
-    {
-        uint z = (x + 1) / 2;
-        y = x;
-        while (z < y) 
-        {
-            y = z;
-            z = (x / z + z) / 2;
+    // From UniSwap core
+    function sqrt(uint256 y) private pure returns (uint256 z) {
+        if (y > 3) {
+            z = y;
+            uint256 x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
         }
     }
 }
