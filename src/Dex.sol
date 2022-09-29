@@ -8,7 +8,7 @@ contract Dex is ERC20 {
     using SafeERC20 for IERC20;
 
     IERC20 _tokenX;
-    IERC20 _tokenY;
+    IERC20 _tokenY; 
 
     uint256 private k;
 
